@@ -1,0 +1,13 @@
+{
+  "name": "jtl-super-app",
+  "version": "1.0.0",
+  "description": "JTL Performance Test Reporter - Full Stack",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "node backend/src/app.js",
+    "setup": "node scripts/setup.js"
+  }
+}

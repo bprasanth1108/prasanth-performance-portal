@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+
+# Certificates — never commit private keys
+backend/certs/
+
+# Environment files — contain secrets
+backend/.env
+.env
+
+# Logs
+logs/
+*.log
+
+# PostgreSQL data directory
+pgdata/
+
+# Uploads
+backend/uploads/
+
+# OS
+.DS_Store
+Thumbs.db

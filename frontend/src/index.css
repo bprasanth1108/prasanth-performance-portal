@@ -1,0 +1,211 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-lg border border-gray-300 transition-colors;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  }
+  .input {
+    @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent;
+  }
+  .badge-admin                { @apply text-xs font-bold px-2 py-0.5 rounded-full bg-purple-700 text-white; font-family: 'Book Antiqua', Palatino, serif; }
+  .badge-senior_test_engineer { @apply text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white; font-family: 'Book Antiqua', Palatino, serif; }
+  .badge-manager              { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800; }
+  .badge-tester               { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-teal-100 text-teal-800; }
+  .badge-project_manager      { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800; }
+  .badge-developer            { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700; }
+  .badge-viewer               { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-800; }
+  .badge-ready                { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-800; }
+  .badge-error                { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-800; }
+}
+
+
+/* ============================================
+   Launch page — animated colorful background
+   ============================================ */
+@keyframes gradientFlow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animated-bg {
+  background: linear-gradient(-45deg, #6d28d9, #2563eb, #db2777, #ea580c, #059669);
+  background-size: 400% 400%;
+  animation: gradientFlow 18s ease infinite;
+}
+
+@keyframes floatBlob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(30px, -40px) scale(1.12); }
+  66%      { transform: translate(-25px, 25px) scale(0.92); }
+}
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(48px);
+  opacity: 0.55;
+  pointer-events: none;
+  animation: floatBlob 14s ease-in-out infinite;
+}
+.blob-1 { width: 22rem; height: 22rem; background: #a855f7; top: -6rem; left: -6rem; }
+.blob-2 { width: 20rem; height: 20rem; background: #ec4899; bottom: -6rem; right: -4rem; animation-delay: -3s; }
+.blob-3 { width: 16rem; height: 16rem; background: #38bdf8; top: 40%; left: 55%; animation-delay: -6s; }
+.blob-4 { width: 18rem; height: 18rem; background: #f59e0b; bottom: 10%; left: 10%; animation-delay: -9s; }
+
+.grid-overlay {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 42px 42px;
+  pointer-events: none;
+}
+
+@keyframes floatUp {
+  0%   { transform: translateY(0); opacity: 0; }
+  10%  { opacity: 0.7; }
+  90%  { opacity: 0.7; }
+  100% { transform: translateY(-110vh); opacity: 0; }
+}
+.particle {
+  position: absolute;
+  bottom: -20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  animation: floatUp linear infinite;
+  pointer-events: none;
+}
+
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.45); }
+  50%      { transform: scale(1.06); box-shadow: 0 16px 38px -5px rgba(236, 72, 153, 0.55); }
+}
+.logo-badge {
+  background: linear-gradient(135deg, #7c3aed, #2563eb, #ec4899);
+  animation: logoPulse 3s ease-in-out infinite;
+}
+
+@keyframes cardPop {
+  from { opacity: 0; transform: translateY(22px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.login-card { animation: cardPop 0.6s ease-out both; }
+
+.login-footer { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+
+
+/* ============================================
+   Colour palette variables
+   #023047 — deep navy   (sidebar bg)
+   #219EBC — teal        (active nav, accent)
+   #8ECAE6 — sky blue    (hover, secondary)
+   #FFB703 — amber       (highlight/badge)
+   #FB8500 — orange      (primary button)
+   ============================================ */
+:root {
+  --c-navy:   #023047;
+  --c-teal:   #219EBC;
+  --c-sky:    #8ECAE6;
+  --c-amber:  #FFB703;
+  --c-orange: #FB8500;
+  --footer-h: 32px;
+}
+
+/* ============================================
+   App shell — fixed footer height reserved
+   ============================================ */
+
+/* The root shell occupies exactly the viewport minus footer */
+.app-shell {
+  height: calc(100vh - var(--footer-h));
+  display: flex;
+  overflow: hidden;
+  background: #f0f4f7;
+}
+
+/* Sidebar — deep navy, full height of the shell */
+.fiori-sidebar {
+  background: var(--c-navy);
+  border-right: none;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  /* no extra padding-bottom needed — shell already ends above footer */
+}
+
+/* Shell bar — white top bar */
+.fiori-shellbar {
+  background: #ffffff;
+  border-bottom: 2px solid var(--c-sky);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+/* Scrollable content — fills remaining height, scrollbar fully visible */
+.fiori-content {
+  background: #f0f4f7;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Sidebar nav active state */
+.fiori-nav-active {
+  background: var(--c-teal);
+  color: #ffffff;
+}
+.fiori-nav-inactive {
+  color: rgba(255,255,255,0.65);
+}
+.fiori-nav-inactive:hover {
+  background: rgba(255,255,255,0.10);
+  color: #ffffff;
+}
+
+/* Fixed footer — always pinned at the very bottom, full viewport width */
+.fiori-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: var(--footer-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: #4b5563;
+  background: var(--c-navy);
+  border-top: 2px solid var(--c-teal);
+  padding: 0 1rem;
+  white-space: nowrap;
+}
+.fiori-footer strong { color: var(--c-sky); font-weight: 600; }
+.fiori-footer-sep   { color: var(--c-teal); opacity: 0.6; margin: 0 0.15rem; }
+
+/* Override brand colours to use the new palette */
+.btn-primary {
+  background-color: var(--c-orange) !important;
+  color: #ffffff !important;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--c-amber) !important;
+  color: #023047 !important;
+}
