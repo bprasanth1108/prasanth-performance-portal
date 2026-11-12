@@ -4,7 +4,7 @@ import { Activity, FolderOpen, Users, LogOut, ChevronRight, ChevronLeft, KeyRoun
 import useAuthStore from '../store/authStore';
 import { changePassword } from '../api/client';
 import Modal from './Modal';
-import { getRoleLabel } from '../utils/roles';
+import { getRoleLabel, isAdminish, canManageUsers } from '../utils/roles';
 
 function ChangePasswordModal({ onClose }) {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -162,7 +162,8 @@ export default function Layout() {
           {/* Nav */}
           <nav className="flex-1 p-2 space-y-0.5 overflow-hidden">
             {navItem('/', <FolderOpen size={18}/>, 'Projects')}
-            {['admin', 'senior_test_engineer'].includes(user?.role) && navItem('/users', <Users size={18}/>, 'Users')}
+            {isAdminish(user?.role) && navItem('/users', <Users size={18}/>,
+              canManageUsers(user?.role) ? 'Users' : 'Project Access')}
           </nav>
 
           {/* Bottom actions */}
@@ -219,7 +220,7 @@ export default function Layout() {
           <header className="fiori-shellbar flex items-center px-5 h-12">
             <span className="text-sm font-semibold tracking-wide" style={{ color: '#023047' }}>
               {location.pathname === '/'                       ? 'Projects'
-                : location.pathname.startsWith('/users')       ? 'User Management'
+                : location.pathname.startsWith('/users')       ? (canManageUsers(user?.role) ? 'User Management' : 'Project Access')
                 : location.pathname.includes('/runs/')         ? 'Run Details'
                 : location.pathname.includes('/scenarios/')    ? 'Scenario Details'
                 : location.pathname.includes('/projects/')     ? 'Project Details'

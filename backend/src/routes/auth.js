@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../db');
-const { verifyToken, requireAdmin } = require('../middleware/auth');
+const { verifyToken, requireAdmin, requireUserAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -78,7 +78,7 @@ router.put('/change-password', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to change password' });
   }
 });
-// GET /api/auth/users  (admin only)
+// GET /api/auth/users  (read-only list; full-access roles need it to assign project access)
 router.get('/users', verifyToken, requireAdmin, async (req, res) => {
   try {
     const result = await query(
@@ -90,8 +90,8 @@ router.get('/users', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/auth/users  (admin creates user)
-router.post('/users', verifyToken, requireAdmin, async (req, res) => {
+// POST /api/auth/users  (admin / senior test engineer only)
+router.post('/users', verifyToken, requireUserAdmin, async (req, res) => {
   try {
     const { username, password, role } = req.body;
     if (!username || !password || !role)
@@ -112,8 +112,8 @@ router.post('/users', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/auth/users/:id  (admin edits user role or status)
-router.put('/users/:id', verifyToken, requireAdmin, async (req, res) => {
+// PUT /api/auth/users/:id  (admin / senior test engineer only)
+router.put('/users/:id', verifyToken, requireUserAdmin, async (req, res) => {
   try {
     const { role, is_active, password } = req.body;
     const updates = [];
@@ -142,8 +142,8 @@ router.put('/users/:id', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/auth/users/:id  (admin only, cannot delete self)
-router.delete('/users/:id', verifyToken, requireAdmin, async (req, res) => {
+// DELETE /api/auth/users/:id  (admin / senior test engineer only, cannot delete self)
+router.delete('/users/:id', verifyToken, requireUserAdmin, async (req, res) => {
   if (req.params.id === req.user.id)
     return res.status(400).json({ error: 'Cannot delete your own account' });
   try {

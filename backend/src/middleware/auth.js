@@ -2,14 +2,16 @@ const jwt  = require('jsonwebtoken');
 const { query } = require('../db');
 
 // ── Role definitions ───────────────────────────────────────────────────────────
-// Roles that can see ALL projects (bypass per-project membership checks)
-const GLOBAL_ROLES  = ['admin', 'senior_test_engineer'];
+// Super access: everything, including creating / editing / deleting users
+const USER_ADMIN_ROLES = ['admin', 'senior_test_engineer'];
+
+// Full project access: see ALL projects, edit/delete projects, scenarios and runs,
+// and assign users to projects. Everything except user management.
+const GLOBAL_ROLES  = ['admin', 'senior_test_engineer', 'manager', 'tester'];
+const ADMIN_ROLES   = GLOBAL_ROLES;
 
 // Roles that can create projects / scenarios / upload runs
 const CREATOR_ROLES = ['admin', 'senior_test_engineer', 'manager', 'tester', 'project_manager'];
-
-// Roles that can edit / delete (destructive)
-const ADMIN_ROLES   = ['admin', 'senior_test_engineer'];
 
 function verifyToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -25,9 +27,18 @@ function verifyToken(req, res, next) {
   }
 }
 
+// Edit/delete projects, scenarios, runs; manage project membership
 function requireAdmin(req, res, next) {
   if (!ADMIN_ROLES.includes(req.user?.role)) {
-    return res.status(403).json({ error: 'Admin access required' });
+    return res.status(403).json({ error: 'You do not have permission to perform this action' });
+  }
+  next();
+}
+
+// Create / edit / delete user accounts
+function requireUserAdmin(req, res, next) {
+  if (!USER_ADMIN_ROLES.includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Only Administrators and Senior Test Engineers can manage users' });
   }
   next();
 }
@@ -65,6 +76,7 @@ async function requireProjectAccess(req, res, next) {
 module.exports = {
   verifyToken,
   requireAdmin,
+  requireUserAdmin,
   requireManager,
   requireProjectAccess,
   GLOBAL_ROLES,

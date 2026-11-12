@@ -10,12 +10,13 @@ import useAuthStore from '../store/authStore';
 import StatCard from '../components/StatCard';
 import JMeterDashboard from '../components/JMeterDashboard';
 import LabelDetail from '../components/LabelDetail';
+import { isAdminish } from '../utils/roles';
 
 export default function RunDetail() {
   const { projectId, scenarioId, runId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isAdminish(user?.role);
 
   const [project, setProject]   = useState(null);
   const [scenario, setScenario] = useState(null);

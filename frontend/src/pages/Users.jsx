@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, UserCheck, UserX, FolderOpen, X } from 'lucide-re
 import { getUsers, createUser, updateUser, deleteUser, getProjects, getProjectMembers, addProjectMember, removeProjectMember } from '../api/client';
 import useAuthStore from '../store/authStore';
 import Modal from '../components/Modal';
-import { getRoleLabel, ROLE_LABELS } from '../utils/roles';
+import { getRoleLabel, canManageUsers } from '../utils/roles';
 
 // All 6 roles in display order
 const ALL_ROLES = [
@@ -17,6 +17,8 @@ const ALL_ROLES = [
 
 export default function Users() {
   const { user: me } = useAuthStore();
+  // Manager / Tester can assign project access but cannot create or edit users
+  const canEditUsers = canManageUsers(me?.role);
   const [users,    setUsers]    = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -121,7 +123,8 @@ export default function Users() {
   return (
     <div className="p-6 space-y-8">
 
-      {/* ── Users Table ──────────────────────────────────────────────────────── */}
+      {/* ── Users Table (Administrator / Senior Test Engineer only) ─────────── */}
+      {canEditUsers && (
       <section>
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -179,13 +182,17 @@ export default function Users() {
           </table>
         </div>
       </section>
+      )}
 
       {/* ── Project Access Management ─────────────────────────────────────────── */}
       <section>
         <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Project Access</h2>
+          {canEditUsers
+            ? <h2 className="text-xl font-bold text-gray-900">Project Access</h2>
+            : <h1 className="text-2xl font-bold text-gray-900">Project Access</h1>}
           <p className="text-gray-500 text-sm mt-0.5">
-            Assign users to specific projects. Administrators and Senior Test Engineers always have access to all projects.
+            Assign Project Managers and Developers to specific projects. Administrators, Senior Test Engineers,
+            Managers and Testers always have access to all projects.
           </p>
         </div>
 
@@ -285,7 +292,8 @@ export default function Users() {
         <Modal title={`Access — ${memberProject.name}`} onClose={() => setModal(null)}>
           <div className="space-y-4">
             <p className="text-xs text-gray-500">
-              Administrators and Senior Test Engineers always have full access and are not listed here.
+              Administrators, Senior Test Engineers, Managers and Testers already see every project, so only
+              Project Managers and Developers need to be added here.
             </p>
 
             {/* Add user */}

@@ -8,6 +8,7 @@ import ScenarioDetail from './pages/ScenarioDetail';
 import RunDetail from './pages/RunDetail';
 import Users from './pages/Users';
 import Layout from './components/Layout';
+import { isAdminish } from './utils/roles';
 
 function PrivateRoute({ children }) {
   const { token } = useAuthStore();
@@ -17,7 +18,7 @@ function PrivateRoute({ children }) {
 function AdminRoute({ children }) {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
-  if (!['admin', 'senior_test_engineer'].includes(user.role)) return <Navigate to="/" replace />;
+  if (!isAdminish(user.role)) return <Navigate to="/" replace />;
   return children;
 }
 

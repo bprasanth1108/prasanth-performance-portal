@@ -4,6 +4,7 @@ import { Upload, Trash2, ChevronRight, ArrowLeft } from 'lucide-react';
 import { getProject, getScenario, getRuns, uploadRun, deleteRun } from '../api/client';
 import useAuthStore from '../store/authStore';
 import Modal from '../components/Modal';
+import { isAdminish, isCreator } from '../utils/roles';
 
 function fmt(val, unit = 'ms') {
   if (val == null) return '—';
@@ -14,8 +15,9 @@ export default function ScenarioDetail() {
   const { projectId, scenarioId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin';
-  const canUpload = ['admin', 'manager'].includes(user?.role);
+  // Same rules the backend enforces (requireManager / requireAdmin)
+  const isAdmin = isAdminish(user?.role);
+  const canUpload = isCreator(user?.role);
 
   const [project, setProject] = useState(null);
   const [scenario, setScenario] = useState(null);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { isAdminish, isCreator } from '../utils/roles';
 
 const useAuthStore = create((set) => ({
   token: localStorage.getItem('token') || null,
@@ -18,12 +19,12 @@ const useAuthStore = create((set) => ({
 
   isAdmin: () => {
     const user = JSON.parse(localStorage.getItem('user') || 'null');
-    return user?.role === 'admin';
+    return isAdminish(user?.role);
   },
 
   isManager: () => {
     const user = JSON.parse(localStorage.getItem('user') || 'null');
-    return ['admin', 'manager'].includes(user?.role);
+    return isCreator(user?.role);
   },
 }));
 
