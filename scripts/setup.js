@@ -111,22 +111,32 @@ MAX_FILE_SIZE_MB=500
   fs.writeFileSync(path.join(BACKEND, '.env'), env);
   console.log('\n✅ .env written');
 
-  // 4. Generate TLS certificate for THIS machine's hostname
-  console.log(`\n--- Generating TLS certificate for hostname: ${hostname} ---`);
-  const { KEY_FILE, CRT_FILE } = generateCert(hostname);
-  console.log(`✅ Certificate: ${CRT_FILE}`);
-  console.log(`✅ Private key: ${KEY_FILE}`);
-
-  // 5. Install dependencies
+  // 4. Install dependencies (before the cert step: it needs node-forge
+  //    on machines that have no OpenSSL / Git installed)
   console.log('\n--- Installing backend dependencies ---');
   run('npm install --omit=dev', BACKEND);
 
   console.log('\n--- Installing frontend dependencies ---');
   run('npm install', FRONTEND);
 
-  // 6. Build frontend
+  // 5. Build frontend
   console.log('\n--- Building frontend ---');
   run('npm run build', FRONTEND);
+
+  // 6. Generate TLS certificate for THIS machine's hostname.
+  //    Non-fatal: without a cert the app still runs, on plain HTTP.
+  console.log(`\n--- Generating TLS certificate for hostname: ${hostname} ---`);
+  let httpsReady = false;
+  try {
+    const { KEY_FILE, CRT_FILE, method } = generateCert(hostname);
+    console.log(`✅ Certificate: ${CRT_FILE}`);
+    console.log(`✅ Private key: ${KEY_FILE}`);
+    console.log(`   Method     : ${method}`);
+    httpsReady = true;
+  } catch (err) {
+    console.warn(`⚠  Could not create a TLS certificate: ${err.message}`);
+    console.warn('   The app will run on plain HTTP until you run: node scripts/generate-cert.js');
+  }
 
   // 7. Done
   const localUrl   = pubHttps === 443 ? `https://localhost`        : `https://localhost:${httpsPort}`;
@@ -136,13 +146,18 @@ MAX_FILE_SIZE_MB=500
   console.log('\n========================================');
   console.log('  ✅  Setup complete!');
   console.log('========================================');
-  console.log('\n  To start:   node backend/src/app.js');
-  console.log('              or: pm2 start ecosystem.config.js');
-  console.log(`\n  Local:      ${localUrl}`);
-  console.log(`  Network:    ${networkUrl}`);
-  console.log(`  (HTTP ${httpUrl} redirects to HTTPS)`);
+  console.log('\n  To start:   START.bat   (or: node backend/src/app.js)');
 
-  if (wantProxy) {
+  if (httpsReady) {
+    console.log(`\n  Local:      ${localUrl}`);
+    console.log(`  Network:    ${networkUrl}`);
+    console.log(`  (HTTP ${httpUrl} redirects to HTTPS)`);
+  } else {
+    console.log(`\n  Local:      http://localhost:${httpPort}`);
+    console.log(`  Network:    http://${hostname}:${httpPort}`);
+  }
+
+  if (wantProxy && httpsReady) {
     console.log('\n  ⚡ Port forwarding needed (run ONCE as Administrator):');
     console.log('  ┌─────────────────────────────────────────────────────────┐');
     console.log(`  │  netsh interface portproxy add v4tov4 \\`);
@@ -155,8 +170,10 @@ MAX_FILE_SIZE_MB=500
     console.log('  Or run:  .\\scripts\\setup-ports.ps1  (as Administrator)');
   }
 
-  console.log('\n  ⚠  On first browser visit: click Advanced → Proceed');
-  console.log(`     (self-signed cert for ${hostname} — expected)`);
+  if (httpsReady) {
+    console.log('\n  ⚠  On first browser visit: click Advanced → Proceed');
+    console.log(`     (self-signed cert for ${hostname} — expected)`);
+  }
   console.log(`\n  Login:  admin / ${adminPass}`);
   console.log('  ⚠  Change your password after first login!');
   console.log('========================================\n');
