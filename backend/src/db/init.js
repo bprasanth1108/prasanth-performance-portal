@@ -43,6 +43,15 @@ async function runMigrations(client) {
     )
   `);
 
+  // ── User profile fields: name + one-time self-edit lock (idempotent) ──────
+  await client.query(`ALTER TABLE jtl.users ADD COLUMN IF NOT EXISTS name VARCHAR(150)`);
+  await client.query(`ALTER TABLE jtl.users ADD COLUMN IF NOT EXISTS profile_locked BOOLEAN DEFAULT false`);
+  // token_version: incrementing this invalidates all of a user's existing JWTs
+  // (used for logout-everywhere, password change, and admin disable/delete).
+  await client.query(`ALTER TABLE jtl.users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0`);
+  // pending_approval: true for self-registered accounts awaiting admin approval.
+  await client.query(`ALTER TABLE jtl.users ADD COLUMN IF NOT EXISTS pending_approval BOOLEAN DEFAULT false`);
+
   // ── Roles: move to the 6-role system (idempotent, safe on every startup) ──
   // Legacy 'viewer' accounts become 'developer' (also read-only) so the new
   // CHECK constraint does not reject existing rows.
@@ -67,6 +76,21 @@ async function runMigrations(client) {
   `);
   await client.query(`CREATE INDEX IF NOT EXISTS idx_project_members_user    ON jtl.project_members(user_id)`);
   await client.query(`CREATE INDEX IF NOT EXISTS idx_project_members_project ON jtl.project_members(project_id)`);
+
+  // ── Clean up stale project memberships (Option B) ─────────────────────────
+  // Only project_manager and developer are gated per-project. Global roles
+  // (admin, senior_test_engineer, manager, tester) already see every project,
+  // so any membership rows for them are redundant and should not exist. This
+  // removes only rows in jtl.project_members — no user accounts or project data.
+  const cleanup = await client.query(`
+    DELETE FROM jtl.project_members pm
+    USING jtl.users u
+    WHERE pm.user_id = u.id
+      AND u.role NOT IN ('project_manager', 'developer')
+  `);
+  if (cleanup.rowCount) {
+    console.log(`[DB Init] Removed ${cleanup.rowCount} stale project membership row(s) for global-role users.`);
+  }
 }
 
 async function initDatabase() {

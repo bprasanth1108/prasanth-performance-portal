@@ -10,20 +10,51 @@ const USER_ADMIN_ROLES = ['admin', 'senior_test_engineer'];
 const GLOBAL_ROLES  = ['admin', 'senior_test_engineer', 'manager', 'tester'];
 const ADMIN_ROLES   = GLOBAL_ROLES;
 
-// Roles that can create projects / scenarios / upload runs
-const CREATOR_ROLES = ['admin', 'senior_test_engineer', 'manager', 'tester', 'project_manager'];
+// Roles that can create scenarios / upload runs / trigger analysis.
+// NOTE: project_manager is read-only (client access), so it is excluded.
+const CREATOR_ROLES = ['admin', 'senior_test_engineer', 'manager', 'tester'];
 
-function verifyToken(req, res, next) {
+// Roles that can create new projects. Tester is excluded (can work inside
+// projects but not create them). project_manager is read-only.
+const PROJECT_CREATOR_ROLES = ['admin', 'senior_test_engineer', 'manager'];
+
+async function verifyToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ error: 'No token provided' });
 
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  // Server-side validation: the account must still exist, be active, and the
+  // token's version must match the current one in the DB. Bumping the user's
+  // token_version (logout, password change, admin disable/delete) revokes
+  // every previously-issued token immediately.
+  try {
+    const result = await query(
+      'SELECT role, is_active, token_version FROM jtl.users WHERE id = $1',
+      [decoded.id]
+    );
+    if (!result.rows.length) {
+      return res.status(401).json({ error: 'Session no longer valid' });
+    }
+    const row = result.rows[0];
+    if (!row.is_active) {
+      return res.status(401).json({ error: 'Account is disabled' });
+    }
+    if ((decoded.tv ?? 0) !== row.token_version) {
+      return res.status(401).json({ error: 'Session has been revoked. Please log in again.' });
+    }
+    // Keep role fresh from the DB in case it changed since the token was issued.
+    req.user = { ...decoded, role: row.role };
+    next();
+  } catch (err) {
+    console.error('[Auth] Token validation error:', err.message);
+    return res.status(500).json({ error: 'Authentication check failed' });
   }
 }
 
@@ -46,6 +77,14 @@ function requireUserAdmin(req, res, next) {
 function requireManager(req, res, next) {
   if (!CREATOR_ROLES.includes(req.user?.role)) {
     return res.status(403).json({ error: 'Insufficient role to perform this action' });
+  }
+  next();
+}
+
+// Create new projects (admin / senior_test_engineer / manager only)
+function requireProjectCreator(req, res, next) {
+  if (!PROJECT_CREATOR_ROLES.includes(req.user?.role)) {
+    return res.status(403).json({ error: 'You do not have permission to create projects' });
   }
   next();
 }
@@ -78,7 +117,9 @@ module.exports = {
   requireAdmin,
   requireUserAdmin,
   requireManager,
+  requireProjectCreator,
   requireProjectAccess,
   GLOBAL_ROLES,
   CREATOR_ROLES,
+  PROJECT_CREATOR_ROLES,
 };

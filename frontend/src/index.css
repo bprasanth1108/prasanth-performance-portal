@@ -108,6 +108,103 @@
 
 .login-footer { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
 
+/* ============================================
+   Liquid-glass auth UI (Apple-style frosted panel)
+   ============================================ */
+
+/* Standout brand title — sits OUTSIDE the glass card */
+@keyframes titleIn {
+  from { opacity: 0; transform: translateY(-14px); letter-spacing: 0.35em; }
+  to   { opacity: 1; transform: translateY(0);     letter-spacing: 0.18em; }
+}
+.brand-title {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #ffffff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
+  animation: titleIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.brand-subtitle {
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* The frosted liquid-glass panel */
+.glass-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 26px;
+  box-shadow:
+    0 20px 60px -12px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  animation: cardPop 0.6s ease-out both;
+  overflow: hidden;
+}
+/* Specular highlight sweep across the top edge (the "liquid" sheen) */
+.glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.05) 42%, transparent 70%);
+  pointer-events: none;
+}
+.glass-card > * { position: relative; z-index: 1; }
+
+/* Glass inputs — translucent, light text */
+.glass-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  border-radius: 12px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.9rem;
+  color: #ffffff;
+  transition: all 0.2s ease;
+}
+.glass-input::placeholder { color: rgba(255, 255, 255, 0.6); }
+.glass-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+.glass-label {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.glass-input option { color: #111827; }
+
+/* Glass primary button — vivid with a glossy top */
+.glass-btn {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 0.7rem 1rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #ffffff;
+  cursor: pointer;
+  background: linear-gradient(135deg, rgba(251, 133, 0, 0.95), rgba(255, 183, 3, 0.95));
+  box-shadow: 0 8px 24px -6px rgba(251, 133, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.4);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.glass-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
+.glass-btn:active:not(:disabled) { transform: translateY(0); }
+.glass-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.glass-link { color: #ffffff; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.glass-link:hover { color: var(--c-amber); }
+
 
 /* ============================================
    Colour palette variables

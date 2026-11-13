@@ -3,8 +3,16 @@ const express = require('express');
 const https   = require('https');
 const http    = require('http');
 const cors    = require('cors');
+const helmet  = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path    = require('path');
 const fs      = require('fs');
+
+// ── Fail fast on missing/weak JWT secret ────────────────────────────────────────
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  console.error('[FATAL] JWT_SECRET is missing or too short (min 32 chars). Set a strong secret in backend/.env.');
+  process.exit(1);
+}
 
 const { runAllChecks } = require('./utils/systemCheck');
 const { startEmbeddedPostgres, stopEmbeddedPostgres } = require('./db/embedded');
@@ -27,13 +35,75 @@ const CERT_DIR = path.join(__dirname, '../../backend/certs');
 const KEY_FILE  = path.join(CERT_DIR, 'server.key');
 const CRT_FILE  = path.join(CERT_DIR, 'server.crt');
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+// ── Security headers (helmet) ───────────────────────────────────────────────────
+// CSP is disabled here because the SPA + inline styles would need a tailored
+// policy; the other protections (HSTS, noSniff, frameguard, etc.) stay on.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
 }));
+// Behind the netsh/proxy port-forward, trust the first proxy so rate-limit and
+// protocol detection see the real client.
+app.set('trust proxy', 1);
+
+// ── CORS — same-origin by default, plus an optional allow-list ──────────────────
+// This server serves its own frontend, so requests come from the SAME host the
+// app was loaded from. Those are always safe to allow — we compare the request's
+// Origin against its own Host header. CORS_ALLOWED_ORIGINS adds any EXTRA origins
+// (e.g. a separate dev server or domain) as a comma-separated list.
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',').map(o => o.trim()).filter(Boolean);
+
+// Per-request CORS: a request is same-origin when the Origin's hostname matches
+// the request's own Host header. That is always safe here because this server
+// serves its own frontend. Port is ignored because public ports (443/80) are
+// port-forwarded to the app's internal ports (3443/3001).
+app.use(cors((req, cb) => {
+  const origin = req.headers.origin;
+  const options = {
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    origin: false,
+  };
+
+  // Non-browser / same-origin requests have no Origin header.
+  if (!origin) { options.origin = true; return cb(null, options); }
+
+  // Explicit allow-list match.
+  if (allowedOrigins.includes(origin)) { options.origin = true; return cb(null, options); }
+
+  // Same-origin match: compare Origin hostname to the request's own Host.
+  try {
+    const originHost = new URL(origin).hostname.toLowerCase();
+    const reqHost = String(req.headers.host || '').split(':')[0].toLowerCase();
+    if (originHost && originHost === reqHost) { options.origin = true; return cb(null, options); }
+  } catch { /* malformed origin */ }
+
+  return cb(null, options); // origin stays false → CORS headers not set, request blocked
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ── Rate limiting ───────────────────────────────────────────────────────────────
+// Global limiter: blunt abuse / scraping across the whole API.
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', globalLimiter);
+
+// Stricter limiter for auth endpoints (brute-force protection).
+const authLimiter = rateLimit({
+  windowMs: (parseInt(process.env.LOGIN_WINDOW_MINUTES) || 15) * 60 * 1000,
+  max: (parseInt(process.env.LOGIN_MAX_ATTEMPTS) || 5) * 4, // IP-level ceiling
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please wait a few minutes and try again.' },
+});
+app.use('/api/auth/login', authLimiter);
 
 // API routes
 app.use('/api/auth',    authRoutes);

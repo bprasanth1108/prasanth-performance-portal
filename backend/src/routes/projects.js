@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const {
-  verifyToken, requireAdmin, requireManager,
+  verifyToken, requireAdmin, requireProjectCreator,
   requireProjectAccess, GLOBAL_ROLES,
 } = require('../middleware/auth');
 
@@ -75,8 +75,9 @@ router.get('/:id', verifyToken, requireProjectAccess, async (req, res) => {
   }
 });
 
-// POST /api/projects  (creator roles only)
-router.post('/', verifyToken, requireManager, async (req, res) => {
+// POST /api/projects  (admin / senior_test_engineer / manager only)
+// All project creators are global roles, so no project_members row is needed.
+router.post('/', verifyToken, requireProjectCreator, async (req, res) => {
   try {
     const { name, description } = req.body;
     if (!name) return res.status(400).json({ error: 'Project name is required' });
@@ -85,18 +86,7 @@ router.post('/', verifyToken, requireManager, async (req, res) => {
        VALUES ($1, $2, $3) RETURNING *`,
       [name.trim(), description || null, req.user.id]
     );
-    const project = result.rows[0];
-
-    // Auto-assign creator to the project (unless global role — they already see all)
-    if (!GLOBAL_ROLES.includes(req.user.role)) {
-      await query(
-        `INSERT INTO jtl.project_members (project_id, user_id, assigned_by)
-         VALUES ($1, $2, $2) ON CONFLICT DO NOTHING`,
-        [project.id, req.user.id]
-      );
-    }
-
-    res.status(201).json(project);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Project name already exists' });
     res.status(500).json({ error: 'Failed to create project' });
@@ -160,6 +150,15 @@ router.post('/:id/members', verifyToken, requireAdmin, async (req, res) => {
     // Verify the user exists
     const userCheck = await query('SELECT id, username, role FROM jtl.users WHERE id = $1', [user_id]);
     if (!userCheck.rows.length) return res.status(404).json({ error: 'User not found' });
+
+    // Only Project Managers and Developers are gated per-project. Global roles
+    // (admin, senior_test_engineer, manager, tester) already see every project,
+    // so they cannot — and need not — be assigned here.
+    if (!['project_manager', 'developer'].includes(userCheck.rows[0].role)) {
+      return res.status(400).json({
+        error: 'Only Project Managers and Developers can be assigned. Other roles already have access to all projects.',
+      });
+    }
 
     await query(
       `INSERT INTO jtl.project_members (project_id, user_id, assigned_by)

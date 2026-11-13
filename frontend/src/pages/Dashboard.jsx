@@ -4,7 +4,7 @@ import { Plus, FolderOpen, Pencil, Trash2, ChevronRight } from 'lucide-react';
 import { getProjects, createProject, updateProject, deleteProject } from '../api/client';
 import useAuthStore from '../store/authStore';
 import Modal from '../components/Modal';
-import { isAdminish, isCreator } from '../utils/roles';
+import { isAdminish, isProjectCreator } from '../utils/roles';
 
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
@@ -17,7 +17,7 @@ export default function Dashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const isAdmin = isAdminish(user?.role);
-  const canCreate = isCreator(user?.role);
+  const canCreate = isProjectCreator(user?.role);
 
   const load = async () => {
     try {

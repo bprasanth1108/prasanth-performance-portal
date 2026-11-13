@@ -1,10 +1,84 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Activity, FolderOpen, Users, LogOut, ChevronRight, ChevronLeft, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { Activity, FolderOpen, Users, LogOut, ChevronRight, ChevronLeft, KeyRound, Eye, EyeOff, UserCog } from 'lucide-react';
 import useAuthStore from '../store/authStore';
-import { changePassword } from '../api/client';
+import { changePassword, updateProfile } from '../api/client';
 import Modal from './Modal';
 import { getRoleLabel, isAdminish, canManageUsers } from '../utils/roles';
+import useIdleTimeout from '../utils/useIdleTimeout';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function ProfileModal({ onClose }) {
+  const { user, updateUser } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
+  const locked = !isAdmin && !!user?.profile_locked;
+
+  const [form, setForm] = useState({ name: user?.name || '', email: user?.username || '' });
+  const [error, setError]     = useState('');
+  const [success, setSuccess] = useState('');
+  const [saving, setSaving]   = useState(false);
+
+  const handleSubmit = async () => {
+    setError(''); setSuccess('');
+    if (!form.name.trim()) return setError('Name is required');
+    if (!EMAIL_RE.test(form.email.trim())) return setError('Enter a valid email address');
+
+    setSaving(true);
+    try {
+      const res = await updateProfile({ name: form.name.trim(), email: form.email.trim() });
+      updateUser({ name: res.data.name, username: res.data.username, profile_locked: res.data.profile_locked });
+      setSuccess('Profile updated successfully!');
+      setTimeout(onClose, 1200);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="My Profile" onClose={onClose}>
+      <div className="space-y-4">
+        {locked ? (
+          <p className="text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+            Your name and email are already set. Only an administrator can change them now.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">
+            {isAdmin
+              ? 'You can update your name and email at any time.'
+              : 'You can set your name and email only once. After saving, only an administrator can change them.'}
+          </p>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <input className="input" value={form.name} disabled={locked}
+            onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Full name" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <input className="input" type="email" value={form.email} disabled={locked}
+            onChange={e => setForm({ ...form, email: e.target.value })} placeholder="user@example.com" />
+          <p className="text-xs text-gray-400 mt-1">You log in with this email.</p>
+        </div>
+
+        {error   && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+        {success && <p className="text-sm text-green-600 bg-green-50 rounded-lg px-3 py-2">{success}</p>}
+
+        <div className="flex gap-2 justify-end pt-1">
+          <button className="btn-secondary" onClick={onClose} disabled={saving}>Close</button>
+          {!locked && (
+            <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 function ChangePasswordModal({ onClose }) {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -20,8 +94,11 @@ function ChangePasswordModal({ onClose }) {
       return setError('All fields are required');
     if (form.newPassword !== form.confirmPassword)
       return setError('New passwords do not match');
-    if (form.newPassword.length < 6)
-      return setError('New password must be at least 6 characters');
+    if (form.newPassword.length < 8)
+      return setError('New password must be at least 8 characters');
+    if (!/[A-Z]/.test(form.newPassword) || !/[a-z]/.test(form.newPassword)
+        || !/[0-9]/.test(form.newPassword) || !/[^A-Za-z0-9]/.test(form.newPassword))
+      return setError('Password must include upper, lower, number, and special character');
 
     setSaving(true);
     try {
@@ -77,8 +154,8 @@ function ChangePasswordModal({ onClose }) {
         {/* Password strength hint */}
         {form.newPassword && (
           <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-2 space-y-0.5">
-            <p className={form.newPassword.length >= 6 ? 'text-green-600' : 'text-red-500'}>
-              {form.newPassword.length >= 6 ? '✓' : '✗'} At least 6 characters
+            <p className={form.newPassword.length >= 8 ? 'text-green-600' : 'text-red-500'}>
+              {form.newPassword.length >= 8 ? '✓' : '✗'} At least 8 characters
             </p>
             <p className={/[A-Z]/.test(form.newPassword) ? 'text-green-600' : 'text-gray-400'}>
               {/[A-Z]/.test(form.newPassword) ? '✓' : '·'} Uppercase letter
@@ -112,8 +189,15 @@ export default function Layout() {
   const location  = useLocation();
   const [collapsed, setCollapsed]       = useState(false);
   const [showChangePwd, setShowChangePwd] = useState(false);
+  const [showProfile, setShowProfile]   = useState(false);
 
-  const handleLogout = () => { logout(); navigate('/login'); };
+  const handleLogout = async () => { await logout(); navigate('/login'); };
+
+  // Auto-logout after 30 minutes of inactivity.
+  useIdleTimeout(async () => {
+    await logout();
+    navigate('/login', { replace: true, state: { reason: 'idle' } });
+  }, !!user);
 
   const navItem = (to, icon, label) => {
     const active = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
@@ -170,6 +254,18 @@ export default function Layout() {
           <div className="p-2 space-y-1 flex-shrink-0"
             style={{ borderTop: '1px solid rgba(255,255,255,0.10)' }}>
             <button
+              onClick={() => setShowProfile(true)}
+              title="My Profile"
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                ${collapsed ? 'justify-center' : ''}`}
+              style={{ color: 'rgba(255,255,255,0.65)' }}
+              onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.10)'; e.currentTarget.style.color='#fff'; }}
+              onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='rgba(255,255,255,0.65)'; }}>
+              <UserCog size={16} className="flex-shrink-0"/>
+              {!collapsed && <span>My Profile</span>}
+            </button>
+
+            <button
               onClick={() => setShowChangePwd(true)}
               title="Change Password"
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
@@ -194,7 +290,7 @@ export default function Layout() {
                 <div className="min-w-0">
                   <p className="truncate font-bold text-white"
                     style={{ fontFamily: "'Book Antiqua', Palatino, serif", fontSize: '0.85rem' }}>
-                    {user?.username}
+                    {user?.name || user?.username}
                   </p>
                   <span
                     className={`badge-${user?.role}`}
@@ -248,6 +344,9 @@ export default function Layout() {
 
       {/* Change Password Modal */}
       {showChangePwd && <ChangePasswordModal onClose={() => setShowChangePwd(false)}/>}
+
+      {/* Profile Modal */}
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)}/>}
     </>
   );
 }

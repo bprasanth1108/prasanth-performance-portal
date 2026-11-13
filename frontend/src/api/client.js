@@ -27,8 +27,14 @@ api.interceptors.response.use(
 
 // Auth
 export const login = (data) => api.post('/auth/login', data);
+export const register = (data) => api.post('/auth/register', data);
+export const logout = () => api.post('/auth/logout');
+export const getPendingUsers = () => api.get('/auth/pending');
+export const approveUser = (id) => api.post(`/auth/users/${id}/approve`);
+export const rejectUser = (id) => api.post(`/auth/users/${id}/reject`);
 export const getMe = () => api.get('/auth/me');
 export const changePassword = (data) => api.put('/auth/change-password', data);
+export const updateProfile = (data) => api.put('/auth/profile', data);
 export const getUsers = () => api.get('/auth/users');
 export const createUser = (data) => api.post('/auth/users', data);
 export const updateUser = (id, data) => api.put(`/auth/users/${id}`, data);

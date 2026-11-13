@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, UserCheck, UserX, FolderOpen, X } from 'lucide-react';
-import { getUsers, createUser, updateUser, deleteUser, getProjects, getProjectMembers, addProjectMember, removeProjectMember } from '../api/client';
+import { Plus, Pencil, Trash2, UserCheck, UserX, FolderOpen, X, Check } from 'lucide-react';
+import { getUsers, createUser, updateUser, deleteUser, getProjects, getProjectMembers, addProjectMember, removeProjectMember, getPendingUsers, approveUser, rejectUser } from '../api/client';
 import useAuthStore from '../store/authStore';
 import Modal from '../components/Modal';
 import { getRoleLabel, canManageUsers } from '../utils/roles';
+
+// Roles that are gated per-project and therefore assignable in Project Access.
+// Global roles (admin, senior_test_engineer, manager, tester) already see all
+// projects, so they are never listed here.
+const ASSIGNABLE_ROLES = ['project_manager', 'developer'];
+
+const DEFAULT_PASSWORD = 'Test@123';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // All 6 roles in display order
 const ALL_ROLES = [
@@ -20,12 +28,13 @@ export default function Users() {
   // Manager / Tester can assign project access but cannot create or edit users
   const canEditUsers = canManageUsers(me?.role);
   const [users,    setUsers]    = useState([]);
+  const [pending,  setPending]  = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [modal,    setModal]    = useState(null); // 'create' | 'edit' | 'delete' | 'members'
   const [selected, setSelected] = useState(null);
-  const [form,     setForm]     = useState({ username: '', password: '', role: 'developer' });
-  const [editForm, setEditForm] = useState({ role: '', is_active: true, password: '' });
+  const [form,     setForm]     = useState({ name: '', username: '', password: '', role: 'developer' });
+  const [editForm, setEditForm] = useState({ name: '', username: '', role: '', is_active: true, password: '' });
   const [error,    setError]    = useState('');
   const [saving,   setSaving]   = useState(false);
 
@@ -38,33 +47,73 @@ export default function Users() {
 
   const load = async () => {
     try {
-      const [uRes, pRes] = await Promise.all([getUsers(), getProjects()]);
+      const reqs = [getUsers(), getProjects()];
+      if (canEditUsers) reqs.push(getPendingUsers());
+      const [uRes, pRes, pendRes] = await Promise.all(reqs);
       setUsers(uRes.data);
       setProjects(pRes.data);
+      if (pendRes) setPending(pendRes.data);
     } catch { } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
+  // ── Pending approvals ─────────────────────────────────────────────────────────
+  const handleApprove = async (id) => {
+    try { await approveUser(id); load(); }
+    catch (err) { setError(err.response?.data?.error || 'Failed to approve'); }
+  };
+
+  const handleReject = async (id) => {
+    try { await rejectUser(id); setPending(prev => prev.filter(u => u.id !== id)); }
+    catch (err) { setError(err.response?.data?.error || 'Failed to reject'); }
+  };
+
   // ── User CRUD ───────────────────────────────────────────────────────────────
   const handleCreate = async () => {
-    if (!form.username || !form.password) return setError('Username and password required');
+    if (!form.name.trim()) return setError('Name is required');
+    if (!EMAIL_RE.test(form.username.trim())) return setError('Enter a valid email address');
     setSaving(true); setError('');
     try {
-      await createUser(form);
+      // Password is optional — backend defaults to Test@123 when blank.
+      await createUser({
+        name: form.name.trim(),
+        username: form.username.trim(),
+        password: form.password,
+        role: form.role,
+      });
       setModal(null);
-      setForm({ username: '', password: '', role: 'developer' });
+      setForm({ name: '', username: '', password: '', role: 'developer' });
       load();
     } catch (err) { setError(err.response?.data?.error || 'Failed to create user'); }
     finally { setSaving(false); }
   };
 
   const handleUpdate = async () => {
+    if (!editForm.name.trim()) return setError('Name is required');
+    if (!EMAIL_RE.test(editForm.username.trim())) return setError('Enter a valid email address');
     setSaving(true); setError('');
-    const payload = { role: editForm.role, is_active: editForm.is_active };
+    const payload = {
+      name: editForm.name.trim(),
+      username: editForm.username.trim(),
+      role: editForm.role,
+      is_active: editForm.is_active,
+    };
     if (editForm.password) payload.password = editForm.password;
     try { await updateUser(selected.id, payload); setModal(null); load(); }
     catch (err) { setError(err.response?.data?.error || 'Failed to update'); }
+    finally { setSaving(false); }
+  };
+
+  // One-click reset of a user's password back to the default.
+  const handleResetPassword = async () => {
+    setSaving(true); setError('');
+    try {
+      await updateUser(selected.id, { password: DEFAULT_PASSWORD });
+      setError('');
+      setModal(null);
+      load();
+    } catch (err) { setError(err.response?.data?.error || 'Failed to reset password'); }
     finally { setSaving(false); }
   };
 
@@ -77,7 +126,13 @@ export default function Users() {
 
   const openEdit = (u) => {
     setSelected(u);
-    setEditForm({ role: u.role, is_active: u.is_active, password: '' });
+    setEditForm({
+      name: u.name || '',
+      username: u.username || '',
+      role: u.role,
+      is_active: u.is_active,
+      password: '',
+    });
     setError(''); setModal('edit');
   };
 
@@ -113,15 +168,71 @@ export default function Users() {
     } catch (err) { setMemberError(err.response?.data?.error || 'Failed to remove member'); }
   };
 
-  // Users not already in the project (for the add dropdown)
+  // Only Project Managers and Developers need per-project access. Global roles
+  // (admin, senior_test_engineer, manager, tester) already see every project,
+  // so they are never offered in the add dropdown.
   const unassignedUsers = users.filter(
-    u => !members.some(m => m.id === u.id) && u.is_active
+    u => u.is_active
+      && ASSIGNABLE_ROLES.includes(u.role)
+      && !members.some(m => m.id === u.id)
   );
 
   if (loading) return <div className="p-8 text-gray-500">Loading...</div>;
 
   return (
     <div className="p-6 space-y-8">
+
+      {/* ── Pending Approvals (Administrator / Senior Test Engineer only) ───── */}
+      {canEditUsers && pending.length > 0 && (
+      <section>
+        <div className="mb-4">
+          <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            {pending.length} self-registered account{pending.length !== 1 ? 's' : ''} awaiting approval
+          </p>
+        </div>
+
+        <div className="card p-0 overflow-hidden border-amber-200">
+          <table className="w-full text-sm">
+            <thead className="bg-amber-50 border-b border-amber-200">
+              <tr>
+                {['Name', 'Email', 'Role', 'Requested', 'Actions'].map(h => (
+                  <th key={h} className="text-left text-xs font-medium text-amber-700 uppercase tracking-wide px-4 py-3">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {pending.map(u => (
+                <tr key={u.id} className="hover:bg-amber-50/40 transition-colors">
+                  <td className="px-4 py-3 font-medium text-gray-900"
+                    style={{ fontFamily: "'Book Antiqua', Palatino, serif" }}>{u.name || u.username}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{u.username}</td>
+                  <td className="px-4 py-3">
+                    <span className={`badge-${u.role}`}
+                      style={{ fontFamily: "'Book Antiqua', Palatino, serif", color: '#fff', display: 'inline-block' }}>
+                      {getRoleLabel(u.role)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button onClick={() => handleApprove(u.id)}
+                        className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 px-2.5 py-1 rounded-lg transition-colors">
+                        <Check size={13} /> Approve
+                      </button>
+                      <button onClick={() => handleReject(u.id)}
+                        className="flex items-center gap-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-colors">
+                        <X size={13} /> Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      )}
 
       {/* ── Users Table (Administrator / Senior Test Engineer only) ─────────── */}
       {canEditUsers && (
@@ -141,7 +252,7 @@ export default function Users() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Username', 'Role', 'Status', 'Created', ''].map(h => (
+                {['Name', 'Email', 'Role', 'Status', 'Created', ''].map(h => (
                   <th key={h} className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -151,8 +262,9 @@ export default function Users() {
                 <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900"
                     style={{ fontFamily: "'Book Antiqua', Palatino, serif" }}>
-                    {u.username} {u.id === me?.id && <span className="text-xs text-gray-400">(you)</span>}
+                    {u.name || u.username} {u.id === me?.id && <span className="text-xs text-gray-400">(you)</span>}
                   </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{u.username}</td>
                   <td className="px-4 py-3">
                     <span className={`badge-${u.role}`}
                       style={{ fontFamily: "'Book Antiqua', Palatino, serif", color: '#ffffff', display: 'inline-block' }}>
@@ -223,12 +335,18 @@ export default function Users() {
         <Modal title="New User" onClose={() => setModal(null)}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-              <input className="input" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="Username" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+              <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Full name" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-              <input className="input" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Password" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <input className="input" type="email" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="user@example.com" />
+              <p className="text-xs text-gray-400 mt-1">The user logs in with this email.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input className="input" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder={`Leave blank to use ${DEFAULT_PASSWORD}`} />
+              <p className="text-xs text-gray-400 mt-1">If left blank, the default password <strong>{DEFAULT_PASSWORD}</strong> is used.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -247,8 +365,16 @@ export default function Users() {
 
       {/* ── Edit User Modal ──────────────────────────────────────────────────── */}
       {modal === 'edit' && (
-        <Modal title={`Edit — ${selected?.username}`} onClose={() => setModal(null)}>
+        <Modal title={`Edit — ${selected?.name || selected?.username}`} onClose={() => setModal(null)}>
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+              <input className="input" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder="Full name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <input className="input" type="email" value={editForm.username} onChange={e => setEditForm({ ...editForm, username: e.target.value })} placeholder="user@example.com" />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
               <select className="input" value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
@@ -264,7 +390,12 @@ export default function Users() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">New Password <span className="text-gray-400 font-normal">(leave blank to keep)</span></label>
-              <input className="input" type="password" value={editForm.password} onChange={e => setEditForm({ ...editForm, password: e.target.value })} placeholder="New password" />
+              <div className="flex gap-2">
+                <input className="input flex-1" type="password" value={editForm.password} onChange={e => setEditForm({ ...editForm, password: e.target.value })} placeholder="New password" />
+                <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleResetPassword} disabled={saving} title={`Reset password to ${DEFAULT_PASSWORD}`}>
+                  Reset to {DEFAULT_PASSWORD}
+                </button>
+              </div>
             </div>
             {error && <p className="text-red-600 text-sm">{error}</p>}
             <div className="flex gap-2 justify-end">

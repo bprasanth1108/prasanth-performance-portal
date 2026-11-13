@@ -5,9 +5,13 @@ CREATE SCHEMA IF NOT EXISTS jtl;
 CREATE TABLE IF NOT EXISTS jtl.users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(150),
     password VARCHAR(200) NOT NULL,
     role VARCHAR(30) NOT NULL DEFAULT 'developer' CHECK (role IN ('admin','senior_test_engineer','manager','tester','project_manager','developer')),
     is_active BOOLEAN DEFAULT true,
+    profile_locked BOOLEAN DEFAULT false,
+    pending_approval BOOLEAN DEFAULT false,
+    token_version INTEGER NOT NULL DEFAULT 0,
     created_by UUID,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()

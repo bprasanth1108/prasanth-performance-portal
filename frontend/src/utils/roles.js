@@ -4,7 +4,7 @@
 export const ROLE_LABELS = {
   admin:                'Administrator',
   senior_test_engineer: 'Senior Test Engineer',
-  manager:              'Manager',
+  manager:              'Test Manager',
   tester:               'Tester',
   project_manager:      'Project Manager',
   developer:            'Developer',
@@ -18,12 +18,17 @@ export const USER_ADMIN_ROLES = ['admin', 'senior_test_engineer'];
 export const GLOBAL_ROLES = ['admin', 'senior_test_engineer', 'manager', 'tester'];
 export const ADMIN_ROLES  = GLOBAL_ROLES;
 
-// Roles that can create projects / scenarios / upload runs
-export const CREATOR_ROLES = ['admin', 'senior_test_engineer', 'manager', 'tester', 'project_manager'];
+// Roles that can create scenarios / upload runs.
+// project_manager is read-only (client access), so it is excluded.
+export const CREATOR_ROLES = ['admin', 'senior_test_engineer', 'manager', 'tester'];
+
+// Roles that can create new projects. Tester and project_manager excluded.
+export const PROJECT_CREATOR_ROLES = ['admin', 'senior_test_engineer', 'manager'];
 
 export const getRoleLabel = (role) => ROLE_LABELS[role] || role;
 
-export const isGlobal       = (role) => GLOBAL_ROLES.includes(role);
-export const isCreator      = (role) => CREATOR_ROLES.includes(role);
-export const isAdminish     = (role) => ADMIN_ROLES.includes(role);
-export const canManageUsers = (role) => USER_ADMIN_ROLES.includes(role);
+export const isGlobal          = (role) => GLOBAL_ROLES.includes(role);
+export const isCreator         = (role) => CREATOR_ROLES.includes(role);
+export const isProjectCreator  = (role) => PROJECT_CREATOR_ROLES.includes(role);
+export const isAdminish        = (role) => ADMIN_ROLES.includes(role);
+export const canManageUsers    = (role) => USER_ADMIN_ROLES.includes(role);
