@@ -87,3 +87,6 @@ export const analyzeRun = (projectId, scenarioId, id) =>
 
 export const getLabelDetail = (projectId, scenarioId, runId, label) =>
   api.get(`/projects/${projectId}/scenarios/${scenarioId}/runs/${runId}/label-detail/${encodeURIComponent(label)}`);
+
+export const compareRuns = (projectId, scenarioId, ids) =>
+  api.get(`/projects/${projectId}/scenarios/${scenarioId}/runs/compare`, { params: { ids: ids.join(',') } });

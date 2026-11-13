@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Upload, Trash2, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Upload, Trash2, ChevronRight, ArrowLeft, GitCompare } from 'lucide-react';
 import { getProject, getScenario, getRuns, uploadRun, deleteRun } from '../api/client';
+import { formatDateTime } from '../utils/datetime';
 import useAuthStore from '../store/authStore';
 import Modal from '../components/Modal';
 import { isAdminish, isCreator } from '../utils/roles';
@@ -30,7 +31,22 @@ export default function ScenarioDetail() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [compareIds, setCompareIds] = useState([]); // selected run ids for comparison
   const fileRef = useRef();
+
+  // Toggle a run's selection (max 3).
+  const toggleCompare = (id) => {
+    setCompareIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 3) return prev; // cap at 3
+      return [...prev, id];
+    });
+  };
+
+  const goCompare = () => {
+    if (compareIds.length < 2) return;
+    navigate(`/projects/${projectId}/scenarios/${scenarioId}/compare?ids=${compareIds.join(',')}`);
+  };
 
   const load = async () => {
     try {
@@ -40,6 +56,19 @@ export default function ScenarioDetail() {
       setProject(proj.data); setScenario(scen.data); setRuns(r.data);
     } catch { navigate(`/projects/${projectId}`); } finally { setLoading(false); }
   };
+
+  // Map each run id → its run number based on EXECUTED time (oldest executed = #1).
+  // Falls back to uploaded_at only when a run has no start_time.
+  const runNumbers = React.useMemo(() => {
+    const ordered = [...runs].sort((a, b) => {
+      const ta = new Date(a.start_time || a.uploaded_at).getTime();
+      const tb = new Date(b.start_time || b.uploaded_at).getTime();
+      return ta - tb; // ascending: earliest executed first
+    });
+    const map = {};
+    ordered.forEach((run, idx) => { map[run.id] = idx + 1; });
+    return map;
+  }, [runs]);
 
   useEffect(() => { load(); }, [scenarioId]);
 
@@ -89,12 +118,26 @@ export default function ScenarioDetail() {
           {scenario?.description && <p className="text-gray-500 text-sm mt-1">{scenario.description}</p>}
           <p className="text-xs text-gray-400 mt-1">{runs.length} run{runs.length !== 1 ? 's' : ''}</p>
         </div>
-        {canUpload && (
-          <button onClick={() => { setError(''); setModal('upload'); }} className="btn-primary flex items-center gap-2">
-            <Upload size={16} /> Upload JTL
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {compareIds.length >= 2 && (
+            <button onClick={goCompare} className="btn-secondary flex items-center gap-2">
+              <GitCompare size={16} /> Compare ({compareIds.length})
+            </button>
+          )}
+          {canUpload && (
+            <button onClick={() => { setError(''); setModal('upload'); }} className="btn-primary flex items-center gap-2">
+              <Upload size={16} /> Upload JTL
+            </button>
+          )}
+        </div>
       </div>
+
+      {runs.length > 1 && (
+        <p className="text-xs text-gray-400 mb-2">
+          Tip: tick 2–3 runs to compare them side by side.
+          {compareIds.length > 0 && ` ${compareIds.length} selected.`}
+        </p>
+      )}
 
       {runs.length === 0 ? (
         <div className="card text-center py-16">
@@ -105,7 +148,8 @@ export default function ScenarioDetail() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['#', 'Test Name', 'Date', 'Environment', 'Requests', 'Error %', 'Avg (ms)', 'P95 (ms)', 'Throughput', 'Status', ''].map(h => (
+                <th className="px-4 py-3 w-8"></th>
+                {['#', 'Test Name', 'Executed', 'Environment', 'Requests', 'Error %', 'Avg (ms)', 'P95 (ms)', 'Throughput', 'Status', ''].map(h => (
                   <th key={h} className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -114,13 +158,25 @@ export default function ScenarioDetail() {
               {runs.map((r, i) => (
                 <tr key={r.id} onClick={() => navigate(`/projects/${projectId}/scenarios/${scenarioId}/runs/${r.id}`)}
                   className="hover:bg-gray-50 cursor-pointer transition-colors group">
-                  <td className="px-4 py-3 text-gray-500 font-mono text-xs">#{runs.length - i}</td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="cursor-pointer"
+                      checked={compareIds.includes(r.id)}
+                      disabled={!compareIds.includes(r.id) && compareIds.length >= 3}
+                      onChange={() => toggleCompare(r.id)}
+                      title="Select to compare (max 3)"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 font-mono text-xs">#{runNumbers[r.id]}</td>
                   <td className="px-4 py-3">
                     {r.test_name
                       ? <span className="font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md text-xs">{r.test_name}</span>
                       : <span className="text-gray-400 text-xs italic">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap text-xs">{new Date(r.uploaded_at).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap text-xs">
+                    {r.start_time ? formatDateTime(r.start_time) : '—'}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{r.environment || '—'}</td>
                   <td className="px-4 py-3 font-medium">{r.total_requests?.toLocaleString() || '—'}</td>
                   <td className="px-4 py-3">

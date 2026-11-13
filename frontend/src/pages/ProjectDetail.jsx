@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Plus, Pencil, Trash2, ChevronRight, ArrowLeft } from 'lucide-react';
 import { getProject, getScenarios, createScenario, updateScenario, deleteScenario } from '../api/client';
 import useAuthStore from '../store/authStore';
+import { formatDate } from '../utils/datetime';
 import Modal from '../components/Modal';
 import { isAdminish, isCreator } from '../utils/roles';
 
@@ -96,7 +97,7 @@ export default function ProjectDetail() {
                 {s.description && <p className="text-sm text-gray-500 mt-0.5 truncate">{s.description}</p>}
                 <p className="text-xs text-gray-400 mt-1">
                   {s.run_count} run{s.run_count !== '1' ? 's' : ''}
-                  {s.last_run_at ? ` · Last run ${new Date(s.last_run_at).toLocaleDateString()}` : ''}
+                  {s.last_run_at ? ` · Last run ${formatDate(s.last_run_at)}` : ''}
                 </p>
               </div>
               <div className="flex items-center gap-2 ml-4">

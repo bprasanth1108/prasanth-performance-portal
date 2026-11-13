@@ -5,6 +5,7 @@ import {
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts';
+import { formatDateTime } from '../utils/datetime';
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#6366f1'];
 const APDEX_COLOR = { Excellent:'#22c55e', Good:'#3b82f6', Fair:'#f59e0b', Poor:'#f97316', Unacceptable:'#ef4444' };
@@ -434,7 +435,7 @@ export default function JMeterDashboard({ projectId, scenarioId, runId }) {
       {/* Row 9: Top Errors */}
       <TopErrorsTable data={data.topErrors} />
 
-      <p className="text-xs text-gray-400 text-right">Dashboard built: {data.builtAt ? new Date(data.builtAt).toLocaleString() : ''}</p>
+      <p className="text-xs text-gray-400 text-right">Dashboard built: {data.builtAt ? formatDateTime(data.builtAt) : ''}</p>
     </div>
   );
 }

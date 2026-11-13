@@ -4,6 +4,7 @@ import { getUsers, createUser, updateUser, deleteUser, getProjects, getProjectMe
 import useAuthStore from '../store/authStore';
 import Modal from '../components/Modal';
 import { getRoleLabel, canManageUsers } from '../utils/roles';
+import { formatDate } from '../utils/datetime';
 
 // Roles that are gated per-project and therefore assignable in Project Access.
 // Global roles (admin, senior_test_engineer, manager, tester) already see all
@@ -213,7 +214,7 @@ export default function Users() {
                       {getRoleLabel(u.role)}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDate(u.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button onClick={() => handleApprove(u.id)}
@@ -276,7 +277,7 @@ export default function Users() {
                       ? <span className="flex items-center gap-1 text-green-600 text-xs"><UserCheck size={13} /> Active</span>
                       : <span className="flex items-center gap-1 text-red-500 text-xs"><UserX size={13} /> Inactive</span>}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDate(u.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
                       <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors" title="Edit user"><Pencil size={14} /></button>

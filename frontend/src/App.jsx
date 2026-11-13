@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import ScenarioDetail from './pages/ScenarioDetail';
+import CompareRuns from './pages/CompareRuns';
 import RunDetail from './pages/RunDetail';
 import Users from './pages/Users';
 import Layout from './components/Layout';
@@ -33,6 +34,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="projects/:projectId" element={<ProjectDetail />} />
           <Route path="projects/:projectId/scenarios/:scenarioId" element={<ScenarioDetail />} />
+          <Route path="projects/:projectId/scenarios/:scenarioId/compare" element={<CompareRuns />} />
           <Route path="projects/:projectId/scenarios/:scenarioId/runs/:runId" element={<RunDetail />} />
           <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
         </Route>

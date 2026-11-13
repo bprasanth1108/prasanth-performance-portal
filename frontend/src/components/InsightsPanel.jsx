@@ -4,6 +4,7 @@ import {
   Lightbulb, ChevronDown, ChevronUp, Play, RefreshCw
 } from 'lucide-react';
 import { getRunInsights, analyzeRun } from '../api/client';
+import { formatDateTime } from '../utils/datetime';
 
 const SEV_CONFIG = {
   critical: {
@@ -294,7 +295,7 @@ export default function InsightsPanel({ projectId, scenarioId, runId }) {
       )}
 
       <p className="text-xs text-gray-400 text-right">
-        Analyzed {insights.analyzedAt ? new Date(insights.analyzedAt).toLocaleString() : ''}
+        Analyzed {insights.analyzedAt ? formatDateTime(insights.analyzedAt) : ''}
       </p>
     </div>
   );

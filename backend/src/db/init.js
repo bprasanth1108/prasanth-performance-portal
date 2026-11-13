@@ -49,6 +49,10 @@ async function runMigrations(client) {
   // token_version: incrementing this invalidates all of a user's existing JWTs
   // (used for logout-everywhere, password change, and admin disable/delete).
   await client.query(`ALTER TABLE jtl.users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0`);
+
+  // Widen health_grade so fallback values like 'N/A' never overflow VARCHAR(2),
+  // which previously caused analysis to be saved as a '0/100 (E) Error' record.
+  await client.query(`ALTER TABLE jtl.run_insights ALTER COLUMN health_grade TYPE VARCHAR(5)`);
   // pending_approval: true for self-registered accounts awaiting admin approval.
   await client.query(`ALTER TABLE jtl.users ADD COLUMN IF NOT EXISTS pending_approval BOOLEAN DEFAULT false`);
 

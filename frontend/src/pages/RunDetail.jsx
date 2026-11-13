@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { getProject, getScenario, getRun, getRunChartData, updateRun } from '../api/client';
 import useAuthStore from '../store/authStore';
+import { formatDateTime } from '../utils/datetime';
 import StatCard from '../components/StatCard';
 import JMeterDashboard from '../components/JMeterDashboard';
 import LabelDetail from '../components/LabelDetail';
@@ -112,14 +113,14 @@ export default function RunDetail() {
             {run?.start_time ? (
               <>
                 <span className="text-sm text-gray-500">
-                  🕐 Started: <span className="font-medium text-gray-700">{new Date(run.start_time).toLocaleString()}</span>
+                  🕐 Started: <span className="font-medium text-gray-700">{formatDateTime(run.start_time)}</span>
                 </span>
                 {run?.duration != null && (
                   <>
                     <span className="text-gray-300">·</span>
                     <span className="text-sm text-gray-500">
                       🏁 Ended: <span className="font-medium text-gray-700">
-                        {new Date(new Date(run.start_time).getTime() + run.duration * 1000).toLocaleString()}
+                        {formatDateTime(new Date(run.start_time).getTime() + run.duration * 1000)}
                       </span>
                     </span>
                     <span className="text-gray-300">·</span>
@@ -136,7 +137,7 @@ export default function RunDetail() {
                 )}
               </>
             ) : (
-              <span className="text-sm text-gray-400">📅 Uploaded: {new Date(run?.uploaded_at).toLocaleString()}</span>
+              <span className="text-sm text-gray-400">📅 Uploaded: {formatDateTime(run?.uploaded_at)}</span>
             )}
             {run?.environment && <><span className="text-gray-300">·</span><span className="text-sm font-medium text-gray-700">{run.environment}</span></>}
             {run?.note        && <><span className="text-gray-300">·</span><span className="text-sm text-gray-400">{run.note}</span></>}

@@ -48,6 +48,99 @@ router.get('/', verifyToken, requireProjectAccess, async (req, res) => {
   }
 });
 
+// GET /api/.../runs/compare?ids=id1,id2[,id3]  — compare 2–3 runs in this scenario.
+// NOTE: declared before '/:id' so "compare" is not captured as a run id.
+router.get('/compare', verifyToken, requireProjectAccess, async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+
+    if (ids.length < 2 || ids.length > 3) {
+      return res.status(400).json({ error: 'Select 2 or 3 runs to compare' });
+    }
+
+    // Fetch run + stats + insights + charts, restricted to this scenario.
+    const result = await query(
+      `SELECT r.id, r.test_name, r.environment, r.note, r.start_time, r.duration,
+              r.uploaded_at,
+              rs.total_requests, rs.error_count, rs.error_rate, rs.avg_response_time,
+              rs.min_response_time, rs.max_response_time, rs.p90_response_time,
+              rs.p95_response_time, rs.p99_response_time, rs.throughput, rs.per_label,
+              ri.health_score, ri.health_grade, ri.health_label, ri.summary,
+              rc.response_times_over_time, rc.percentiles_over_time,
+              rc.hits_per_second
+       FROM jtl.runs r
+       LEFT JOIN jtl.run_stats rs  ON rs.run_id = r.id
+       LEFT JOIN jtl.run_insights ri ON ri.run_id = r.id
+       LEFT JOIN jtl.run_charts  rc ON rc.run_id = r.id
+       WHERE r.scenario_id = $1 AND r.id = ANY($2::uuid[])`,
+      [req.params.scenarioId, ids]
+    );
+
+    if (result.rows.length !== ids.length) {
+      return res.status(404).json({ error: 'One or more runs were not found in this scenario' });
+    }
+
+    const parse = (v) => {
+      if (v == null) return null;
+      return typeof v === 'string' ? JSON.parse(v) : v;
+    };
+
+    // Preserve the order the caller requested.
+    const byId = Object.fromEntries(result.rows.map(r => [r.id, r]));
+    const runs = ids.map(id => {
+      const r = byId[id];
+      return {
+        id: r.id,
+        testName: r.test_name,
+        environment: r.environment,
+        startTime: r.start_time,
+        duration: r.duration,
+        uploadedAt: r.uploaded_at,
+        stats: {
+          totalRequests: r.total_requests,
+          errorCount: r.error_count,
+          errorRate: r.error_rate != null ? parseFloat(r.error_rate) : null,
+          avg: r.avg_response_time != null ? parseFloat(r.avg_response_time) : null,
+          min: r.min_response_time != null ? parseFloat(r.min_response_time) : null,
+          max: r.max_response_time != null ? parseFloat(r.max_response_time) : null,
+          p90: r.p90_response_time != null ? parseFloat(r.p90_response_time) : null,
+          p95: r.p95_response_time != null ? parseFloat(r.p95_response_time) : null,
+          p99: r.p99_response_time != null ? parseFloat(r.p99_response_time) : null,
+          throughput: r.throughput != null ? parseFloat(r.throughput) : null,
+        },
+        perLabel: parse(r.per_label) || {},
+        insights: r.health_score != null ? {
+          score: r.health_score, grade: r.health_grade,
+          label: r.health_label, summary: r.summary,
+        } : null,
+        charts: {
+          responseTimesOverTime: parse(r.response_times_over_time) || [],
+          percentilesOverTime:   parse(r.percentiles_over_time) || [],
+          hitsPerSecond:         parse(r.hits_per_second) || [],
+          hasData: r.percentiles_over_time != null,
+        },
+      };
+    });
+
+    // Baseline = oldest executed run (fallback to uploaded_at when start_time null).
+    const baselineId = [...runs].sort((a, b) => {
+      const ta = new Date(a.startTime || a.uploadedAt).getTime();
+      const tb = new Date(b.startTime || b.uploadedAt).getTime();
+      return ta - tb;
+    })[0].id;
+
+    // Union of all labels across the selected runs (for the per-label table + picker).
+    const labelSet = new Set();
+    for (const run of runs) for (const label of Object.keys(run.perLabel)) labelSet.add(label);
+
+    res.json({ runs, baselineId, labels: [...labelSet].sort() });
+  } catch (err) {
+    console.error('Compare error:', err.message);
+    res.status(500).json({ error: 'Failed to compare runs: ' + err.message });
+  }
+});
+
 // GET /api/projects/:projectId/scenarios/:scenarioId/runs/:id
 router.get('/:id', verifyToken, requireProjectAccess, async (req, res) => {
   try {
@@ -210,16 +303,19 @@ router.post('/upload', verifyToken, requireManager, upload.single('jtlFile'), as
 
         // AI Analysis
         const insights = analyzeRun(sRows, statsResult.rows[0]);
+        // Clamp to DB column widths (grade VARCHAR(2), label VARCHAR(50)).
+        const grade = String(insights.healthScore.grade || 'NA').slice(0, 2);
+        const label = String(insights.healthScore.label || '').slice(0, 50);
         await q(
           `INSERT INTO jtl.run_insights (run_id, health_score, health_grade, health_label, summary, findings)
            VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT (run_id) DO UPDATE SET
              health_score=$2, health_grade=$3, health_label=$4,
              summary=$5, findings=$6, analyzed_at=NOW()`,
-          [run.id, insights.healthScore.score, insights.healthScore.grade,
-           insights.healthScore.label, insights.summary, JSON.stringify(insights.findings)]
+          [run.id, insights.healthScore.score, grade,
+           label, insights.summary, JSON.stringify(insights.findings)]
         );
-        console.log(`[AI] Analysis complete for run ${run.id}: ${insights.healthScore.label} (${insights.healthScore.score}/100)`);
+        console.log(`[AI] Analysis complete for run ${run.id}: ${label} (${insights.healthScore.score}/100)`);
       } catch (err) {
         console.error('[Background] Processing failed:', err.message);
       }
@@ -514,30 +610,36 @@ router.post('/:id/analyze', verifyToken, requireManager, async (req, res) => {
         }
 
         if (charts) {
-          await query(
-            `INSERT INTO jtl.run_charts
-               (run_id, apdex, statistics, request_summary, response_times_over_time,
-                percentiles_over_time, active_threads_over_time, bytes_over_time,
-                latency_over_time, hits_per_second, codes_per_second,
-                response_time_distribution, percentiles_per_label, top_errors)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-             ON CONFLICT (run_id) DO UPDATE SET
-               apdex=$2, statistics=$3, request_summary=$4,
-               response_times_over_time=$5, percentiles_over_time=$6,
-               active_threads_over_time=$7, bytes_over_time=$8,
-               latency_over_time=$9, hits_per_second=$10, codes_per_second=$11,
-               response_time_distribution=$12, percentiles_per_label=$13,
-               top_errors=$14, built_at=NOW()`,
-            [runId,
-             JSON.stringify(charts.apdex), JSON.stringify(charts.statistics),
-             JSON.stringify(charts.requestSummary), JSON.stringify(charts.responseTimesOverTime),
-             JSON.stringify(charts.percentilesOverTime), JSON.stringify(charts.activeThreadsOverTime),
-             JSON.stringify(charts.bytesOverTime), JSON.stringify(charts.latencyOverTime),
-             JSON.stringify(charts.hitsPerSecond), JSON.stringify(charts.codesPerSecond),
-             JSON.stringify(charts.responseTimeDistribution), JSON.stringify(charts.percentilesPerLabel),
-             JSON.stringify(charts.topErrors)]
-          );
-          console.log(`[Analyze] Charts saved for run ${runId}`);
+          // Guard the chart insert separately so a chart-storage failure does
+          // not abort the whole analysis (insights can still be saved).
+          try {
+            await query(
+              `INSERT INTO jtl.run_charts
+                 (run_id, apdex, statistics, request_summary, response_times_over_time,
+                  percentiles_over_time, active_threads_over_time, bytes_over_time,
+                  latency_over_time, hits_per_second, codes_per_second,
+                  response_time_distribution, percentiles_per_label, top_errors)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+               ON CONFLICT (run_id) DO UPDATE SET
+                 apdex=$2, statistics=$3, request_summary=$4,
+                 response_times_over_time=$5, percentiles_over_time=$6,
+                 active_threads_over_time=$7, bytes_over_time=$8,
+                 latency_over_time=$9, hits_per_second=$10, codes_per_second=$11,
+                 response_time_distribution=$12, percentiles_per_label=$13,
+                 top_errors=$14, built_at=NOW()`,
+              [runId,
+               JSON.stringify(charts.apdex), JSON.stringify(charts.statistics),
+               JSON.stringify(charts.requestSummary), JSON.stringify(charts.responseTimesOverTime),
+               JSON.stringify(charts.percentilesOverTime), JSON.stringify(charts.activeThreadsOverTime),
+               JSON.stringify(charts.bytesOverTime), JSON.stringify(charts.latencyOverTime),
+               JSON.stringify(charts.hitsPerSecond), JSON.stringify(charts.codesPerSecond),
+               JSON.stringify(charts.responseTimeDistribution), JSON.stringify(charts.percentilesPerLabel),
+               JSON.stringify(charts.topErrors)]
+            );
+            console.log(`[Analyze] Charts saved for run ${runId}`);
+          } catch (chartSaveErr) {
+            console.error('[Analyze] Chart save failed:', chartSaveErr.message);
+          }
         }
 
         // AI insights
@@ -547,13 +649,18 @@ router.post('/:id/analyze', verifyToken, requireManager, async (req, res) => {
           insights = analyzeRun(normalizedRows, statsResult.rows[0]);
         } catch (aiErr) {
           console.error('[Analyze] AI analysis failed:', aiErr.message, aiErr.stack);
-          // Save a minimal result so UI stops spinning
+          // Save a minimal result so UI stops spinning.
+          // NOTE: health_grade column is VARCHAR(2) — keep grade <= 2 chars.
           insights = {
-            healthScore: { score: 0, grade: 'N/A', label: 'Analysis error' },
+            healthScore: { score: 0, grade: 'NA', label: 'Analysis error' },
             summary: `Analysis failed: ${aiErr.message}`,
             findings: [],
           };
         }
+
+        // Defensive clamping to fit DB column widths (grade VARCHAR(2), label VARCHAR(50)).
+        const grade = String(insights.healthScore.grade || 'NA').slice(0, 2);
+        const label = String(insights.healthScore.label || '').slice(0, 50);
 
         await query(
           `INSERT INTO jtl.run_insights (run_id, health_score, health_grade, health_label, summary, findings)
@@ -561,10 +668,10 @@ router.post('/:id/analyze', verifyToken, requireManager, async (req, res) => {
            ON CONFLICT (run_id) DO UPDATE SET
              health_score=$2, health_grade=$3, health_label=$4,
              summary=$5, findings=$6, analyzed_at=NOW()`,
-          [runId, insights.healthScore.score, insights.healthScore.grade,
-           insights.healthScore.label, insights.summary, JSON.stringify(insights.findings)]
+          [runId, insights.healthScore.score, grade,
+           label, insights.summary, JSON.stringify(insights.findings)]
         );
-        console.log(`[Analyze] ✅ Complete for run ${runId}: ${insights.healthScore.label} (${insights.healthScore.score}/100)`);
+        console.log(`[Analyze] ✅ Complete for run ${runId}: ${label} (${insights.healthScore.score}/100)`);
       } catch (err) {
         console.error(`[Analyze] ❌ Fatal error for run ${runId}:`, err.message);
         console.error(err.stack);
